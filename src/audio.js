@@ -256,6 +256,9 @@ export class Audio {
         case 'warn':
           this.taiko(t, 0.5, 0.9); this.taiko(t + 0.18, 0.4, 0.9);
           break;
+        case 'bind':
+          this.taiko(t, 0.6, 0.9); this.noiseSweep(t, 300, 2400, 0.3, 0.12);
+          break;
         case 'gravity':
           this.noiseSweep(t, 3000, 200, 0.25, 0.12);
           break;

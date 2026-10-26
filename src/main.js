@@ -120,7 +120,7 @@ function showTouchDash(show) {
 function drawPortrait(cv, ch) {
   const ctx = cv.getContext('2d');
   ctx.clearRect(0, 0, cv.width, cv.height);
-  const g = ctx.createRadialGradient(96, 100, 10, 96, 100, 96);
+  const g = ctx.createRadialGradient(96, 100, 10, 96, 100, 80);
   g.addColorStop(0, ch.glow + '0.45)'); g.addColorStop(1, ch.glow + '0)');
   ctx.fillStyle = g; ctx.fillRect(0, 0, 192, 192);
   const fake = { player: { x: 0, y: 0, vx: 0, vy: 0, face: 1, inv: 0, dashT: 0, dashCd: 0 }, char: ch, stats: { cdMul: 1 } };
@@ -303,7 +303,7 @@ let last = performance.now();
 let acc = 0;
 const STEP = 1 / 60;
 function frame(now) {
-  requestAnimationFrame(frame);
+  if (!params.has('capture')) requestAnimationFrame(frame);
   let dt = Math.max(0, Math.min(0.1, (now - last) / 1000));
   last = now;
   if (!game) return;
@@ -353,4 +353,10 @@ applySettings(save.settings);
 if (TEST && params.has('run')) startRun(params.get('char') || 'yui');
 else if (AUTOPLAY) startRun(params.get('char') || 'yui');
 else showTitle();
-requestAnimationFrame(frame);
+// Capture mode (used to record docs/demo.gif): the page is stepped frame-by-frame by the
+// recorder instead of requestAnimationFrame, so the recording is smooth regardless of host speed.
+if (params.has('capture')) {
+  let simNow = performance.now();
+  last = simNow;
+  window.__frame = (ms = 1000 / 30) => { simNow += ms; frame(simNow); };
+} else requestAnimationFrame(frame);

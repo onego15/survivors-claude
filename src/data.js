@@ -63,7 +63,7 @@ export const UPGRADES = {
   needle: {
     kind: 'charm', name: '縫針', en: 'Needles', icon: '針', color: '#d8e6ff', max: 5,
     desc: (lv) => lv === 0 ? '最寄りの妖へ針を放つ。輪を閉じた直後は連射になる。' : `針の数と威力が上昇（Lv${lv + 1}）`,
-    stat: (lv) => ({ cd: 0.95 - lv * 0.07, dmg: 8 + lv * 4, count: 1 + Math.floor((lv + 1) / 2), pierce: lv >= 3 ? 2 : 1 }),
+    stat: (lv) => ({ cd: 1.15 - lv * 0.06, dmg: 6 + lv * 2.5, count: 1 + Math.floor((lv + 1) / 2), pierce: lv >= 3 ? 2 : 1 }),
     evolve: { with: 'haste', into: 'needle_x' },
   },
   bell: {
@@ -161,8 +161,8 @@ export const ENEMIES = {
   kamiuo:  { name: '紙魚', hp: 6, spd: 150, r: 10, dmg: 6, xp: 1, ai: 'school', mass: 0.6 },
   kumo:    { name: '子蜘蛛', hp: 14, spd: 120, r: 10, dmg: 6, xp: 1, ai: 'chase', mass: 0.7 },
   // bosses
-  obasami: { name: '大鋏', title: '糸断ちの大鋏', hp: 2600, spd: 85, r: 46, dmg: 18, xp: 60, ai: 'boss_scissors', mass: 50, boss: 1 },
-  hyakume: { name: '百目灯', title: '百の眼の大提灯', hp: 7500, spd: 55, r: 54, dmg: 18, xp: 120, ai: 'boss_lantern', mass: 60, boss: 2 },
+  obasami: { name: '大鋏', title: '糸断ちの大鋏', hp: 3200, spd: 85, r: 46, dmg: 18, xp: 60, ai: 'boss_scissors', mass: 50, boss: 1 },
+  hyakume: { name: '百目灯', title: '百の眼の大提灯', hp: 13000, spd: 55, r: 54, dmg: 18, xp: 120, ai: 'boss_lantern', mass: 60, boss: 2 },
   jorou:   { name: '夜織', title: '夜を織る女郎蜘蛛', hp: 21000, spd: 70, r: 60, dmg: 22, xp: 0, ai: 'boss_spider', mass: 80, boss: 3 },
 };
 for (const [id, e] of Object.entries(ENEMIES)) e.id = id;

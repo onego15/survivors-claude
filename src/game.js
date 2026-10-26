@@ -21,6 +21,7 @@ export class Game {
     this.rng = makeRng(this.seed);
     this.char = CHARACTERS.find((c) => c.id === (opts.char || 'yui')) || CHARACTERS[0];
     this.meta = opts.meta || {};
+    this.god = !!opts.god; // test-only: player cannot be hurt
     this.view = { w: 1280, h: 760 };
     this.hash = new SpatialHash(64);
 
@@ -103,12 +104,13 @@ export class Game {
     s.armor = this.lv('ward');
     s.invTime = 0.5 * (1 + 0.1 * this.lv('ward'));
     s.regen = 0.25 * this.lv('vigor');
-    s.threadLen = (960 + 14 * (this.level - 1)) * (1 + 0.18 * this.lv('longthread')) * (c.threadLen || 1) * (1 + 0.06 * (m.thread || 0)) * (this.evolved.razor ? 1.3 : 1);
+    s.threadLen = (1100 + 14 * (this.level - 1)) * (1 + 0.18 * this.lv('longthread')) * (c.threadLen || 1) * (1 + 0.06 * (m.thread || 0)) * (this.evolved.razor ? 1.3 : 1);
     s.knotMul = (1 + 0.15 * this.lv('steel')) * (1 + 0.06 * (m.knot || 0));
     s.cdMul = 1 - 0.08 * this.lv('haste');
     s.crit = 0.04 + 0.06 * this.lv('luck');
     s.xpMul = 1 + 0.05 * (m.xp || 0);
     s.choices = this.lv('luck') >= 3 ? 4 : 3;
+    s.snap = 22;
     this.player.maxHp = s.maxHp;
     if (s.maxHp > oldMax) this.player.hp += s.maxHp - oldMax;
     this.player.hp = Math.min(this.player.hp, s.maxHp);
@@ -310,7 +312,7 @@ export class Game {
 
   hurtPlayer(dmg, srcX, srcY) {
     const p = this.player;
-    if (p.inv > 0 || p.dashT > 0 || this.endTimer > 0) return;
+    if (p.inv > 0 || p.dashT > 0 || this.endTimer > 0 || this.god) return;
     const d = Math.max(1, dmg - this.stats.armor);
     p.hp -= d;
     p.inv = this.stats.invTime;
@@ -365,6 +367,27 @@ export class Game {
       this.threadLen = this.thread[1].d;
       return true;
     }
+    // Near-miss assist: brushing past an older part of the thread also ties the knot
+    const snap = this.stats.snap;
+    let acc = 0, bi = -1, bd = snap * snap;
+    for (let i = n - 1; i > 0; i--) {
+      acc += th[i].d;
+      if (acc < 260) continue; // ignore the freshly drawn part
+      const dd = dist2(th[i].x, th[i].y, x, y);
+      if (dd < bd) { bd = dd; bi = i; }
+    }
+    if (bi >= 0) {
+      const poly = [];
+      for (let k = bi; k < n; k++) poly.push(th[k].x, th[k].y);
+      poly.push(x, y);
+      const area = polyArea(poly);
+      if (area >= MIN_LOOP_AREA) {
+        this.closeLoop(poly, area);
+        this.thread = [{ x: th[bi].x, y: th[bi].y, t, d: 0 }, { x, y, t, d: Math.sqrt(bd) }];
+        this.threadLen = this.thread[1].d;
+        return true;
+      }
+    }
     const d = Math.hypot(x - a.x, y - a.y);
     th.push({ x, y, t, d });
     this.threadLen += d;
@@ -388,8 +411,10 @@ export class Game {
     const th = this.thread, p = this.player;
     const n = th.length;
     if (n < 12) return null;
-    let best = -1, bd = 46 * 46;
-    for (let i = 0; i < n - 10; i++) {
+    let best = -1, bd = 64 * 64, acc = 0;
+    for (let i = n - 1; i > 0; i--) {
+      acc += th[i].d;
+      if (acc < 260) continue;
       const d = dist2(th[i].x, th[i].y, p.x, p.y);
       if (d < bd) { bd = d; best = i; }
     }
@@ -445,11 +470,11 @@ export class Game {
     let weight = 0;
     this.hash.queryRect(bb.x0, bb.y0, bb.x1, bb.y1, (e) => {
       if (e.dead) return;
-      if (pointInPoly(e.x, e.y, poly)) { captured.push(e); weight += e.boss ? 6 : e.elite ? 3 : 1; }
+      if (pointInPoly(e.x, e.y, poly)) { captured.push(e); weight += e.elite ? 3 : 1; }
     });
     // bosses may be bigger than a hash cell; check them explicitly
     if (this.boss && !this.boss.dead && !captured.includes(this.boss) && pointInPoly(this.boss.x, this.boss.y, poly)) {
-      captured.push(this.boss); weight += 6;
+      captured.push(this.boss); weight += 10;
     }
     const n = captured.length;
     if (!k.echo) {
@@ -462,8 +487,14 @@ export class Game {
     const base = (18 + this.level * 2.4) * this.stats.knotMul;
     const dmg = base * mult * comboMul * (crit ? 2 : 1) * k.ratio;
     for (const e of captured) {
-      this.damage(e, dmg, 'knot', { crit, big: true, nokb: true });
+      this.damage(e, e.boss ? dmg * 1.5 : dmg, 'knot', { crit, big: true, nokb: true });
       e.stun = Math.max(e.stun || 0, 0.35);
+      if (e.boss && !k.echo) {
+        // a bound great yokai is held in place for a moment: wrap it again!
+        e.bound = 2.6;
+        this.telegraphs = this.telegraphs.filter((t) => t.owner !== e.id);
+        this.emit({ type: 'bind', x: e.x, y: e.y, r: e.r });
+      }
     }
     if (!k.echo) this.bestKnot = Math.max(this.bestKnot, n);
     this.emit({ type: 'knot', poly, cx: k.cx, cy: k.cy, n, dmg, crit, echo: k.echo, combo: this.combo, mult, area: k.area });
@@ -683,15 +714,17 @@ export class Game {
       this.runEvent(EVENTS[this.eventIdx++]);
     }
     const w = this.currentWave();
-    const cap = 140 + this.time * 0.42;
+    const cap = 110 + this.time * 0.32;
     let rate = w.rate;
-    if (this.boss) rate *= this.boss.def.boss === 3 ? 0.45 : 0.55;
+    if (this.boss) rate *= this.boss.def.boss === 3 ? 0.3 : 0.35;
     if (this.endTimer > 0) rate = 0;
     this.spawnAcc += rate * dt;
     while (this.spawnAcc >= 1) {
       this.spawnAcc -= 1;
       if (this.enemies.length >= cap) continue;
-      this.spawnEnemy(this.pickWeighted(w.w));
+      let type = this.pickWeighted(w.w);
+      if (type === 'hasami' && this.enemies.filter((e) => e.type === 'hasami').length >= 1 + Math.floor(this.time / 300)) type = 'sumi';
+      this.spawnEnemy(type);
     }
   }
 
@@ -863,7 +896,7 @@ export class Game {
             // snip
             if (e.timer <= 0) {
               for (let i = Math.max(0, target - 6); i < Math.min(th.length - 2, target + 6); i++) {
-                if (dist2(th[i].x, th[i].y, e.x, e.y) < (e.r + 5) ** 2) { this.cutThread(i, th[i].x, th[i].y); e.timer = 3.2; e.stun = 1.4; break; }
+                if (dist2(th[i].x, th[i].y, e.x, e.y) < (e.r + 5) ** 2) { this.cutThread(i, th[i].x, th[i].y); e.timer = 6; e.stun = 2.2; break; }
               }
             }
           } else { tx = (dx / d) * sp; ty = (dy / d) * sp; }
@@ -918,30 +951,38 @@ export class Game {
     const p = this.player;
     const hpf = b.hp / b.maxHp;
     const mv = (vx, vy, k = 4) => { const kk = Math.min(1, dt * k); b.vx += (vx - b.vx) * kk; b.vy += (vy - b.vy) * kk; };
+    if (b.bindImmune > 0) b.bindImmune -= dt;
+    if (b.tangleAcc > 0 && !(b.tangle > 0)) b.tangleAcc = Math.max(0, b.tangleAcc - dt * 0.5);
+    if (b.bound > 0) {
+      b.bound -= dt;
+      b.vx = 0; b.vy = 0; b.air = 0;
+      if (b.state === 'charge' || b.state === 'aim' || b.state === 'crouch' || b.state === 'leap') { b.state = b.def.ai === 'boss_spider' ? 'rest' : 'recover'; b.restT = 0.5; b.timer = 0.6; }
+      return;
+    }
     if (b.state === 'enter') {
       mv(0, 0);
       if (b.timer <= 0) { b.state = 'idle'; b.timer = 1.5; }
     } else if (b.def.ai === 'boss_scissors') {
       if (b.state === 'idle') {
-        mv((dx / d) * b.spd, (dy / d) * b.spd);
+        mv((dx / d) * b.spd * 0.75, (dy / d) * b.spd * 0.75);
         if (b.timer <= 0) {
           b.state = 'aim'; b.timer = hpf < 0.5 ? 0.6 : 0.85; b.charges = hpf < 0.5 ? 2 : 1;
           b.ax = dx / d; b.ay = dy / d;
-          this.telegraphs.push({ kind: 'line', x: b.x, y: b.y, dx: b.ax, dy: b.ay, len: 640, w: b.r * 1.6, t: b.timer, max: b.timer, owner: b.id });
+          this.telegraphs.push({ kind: 'line', x: b.x, y: b.y, dx: b.ax, dy: b.ay, len: 300, w: b.r * 1.6, t: b.timer, max: b.timer, owner: b.id });
           this.emit({ type: 'telegraph', x: b.x, y: b.y });
         }
         b.summon = (b.summon ?? 6) - dt;
         if (b.summon <= 0) {
-          b.summon = 8;
-          for (let i = 0; i < 6; i++) { const a = (i / 6) * TAU; this.spawnEnemy('hasami', b.x + Math.cos(a) * 90, b.y + Math.sin(a) * 90); }
+          b.summon = 11;
+          for (let i = 0; i < 3; i++) { const a = (i / 3) * TAU; this.spawnEnemy('hasami', b.x + Math.cos(a) * 90, b.y + Math.sin(a) * 90); }
         }
       } else if (b.state === 'aim') {
         mv(0, 0, 10);
         const tg = this.telegraphs.find((t) => t.owner === b.id);
         if (tg) { tg.x = b.x; tg.y = b.y; }
-        if (b.timer <= 0) { b.state = 'charge'; b.timer = 0.62; this.emit({ type: 'snip', x: b.x, y: b.y }); }
+        if (b.timer <= 0) { b.state = 'charge'; b.timer = 0.5; this.emit({ type: 'snip', x: b.x, y: b.y }); }
       } else if (b.state === 'charge') {
-        b.vx = b.ax * 640; b.vy = b.ay * 640;
+        b.vx = b.ax * 580; b.vy = b.ay * 580;
         // cut the thread along the way
         const th = this.thread;
         for (let i = 0; i < th.length - 2; i += 2) {
@@ -951,17 +992,17 @@ export class Game {
           b.charges--;
           if (b.charges > 0) {
             b.state = 'aim'; b.timer = 0.45; b.ax = dx / d; b.ay = dy / d;
-            this.telegraphs.push({ kind: 'line', x: b.x, y: b.y, dx: b.ax, dy: b.ay, len: 640, w: b.r * 1.6, t: 0.45, max: 0.45, owner: b.id });
-          } else { b.state = 'recover'; b.timer = 0.9; }
+            this.telegraphs.push({ kind: 'line', x: b.x, y: b.y, dx: b.ax, dy: b.ay, len: 300, w: b.r * 1.6, t: 0.45, max: 0.45, owner: b.id });
+          } else { b.state = 'recover'; b.timer = 2.4; }
         }
       } else if (b.state === 'recover') {
         mv(0, 0, 6);
-        if (b.timer <= 0) { b.state = 'idle'; b.timer = 2.4 + this.rng(); }
+        if (b.timer <= 0) { b.state = 'idle'; b.timer = 2.6 + this.rng(); }
       }
     } else if (b.def.ai === 'boss_lantern') {
-      const want = 280;
-      const f = d > want + 40 ? 1 : d < want - 60 ? -0.8 : 0;
-      mv((dx / d) * b.spd * f + (-dy / d) * 30, (dy / d) * b.spd * f + (dx / d) * 30, 2);
+      // drifts slowly after the player, swaying like a lantern on the wind
+      const f = d > 160 ? 0.7 : 0.2;
+      mv((dx / d) * b.spd * f + Math.cos(this.time * 0.7) * 25, (dy / d) * b.spd * f + Math.sin(this.time * 0.9) * 25, 2);
       b.ringT = (b.ringT ?? 2) - dt;
       b.aimT = (b.aimT ?? 3.2) - dt;
       b.sumT = (b.sumT ?? 5) - dt;
@@ -1021,7 +1062,7 @@ export class Game {
             const web = { x0: cx - Math.cos(a) * L, y0: cy - Math.sin(a) * L, x1: cx + Math.cos(a) * L, y1: cy + Math.sin(a) * L, t: 0, arm: 0.9, life: 9 };
             this.webs.push(web);
           }
-          if (this.webs.length > 6) this.webs.splice(0, this.webs.length - 6);
+          if (this.webs.length > 4) this.webs.splice(0, this.webs.length - 4);
           this.emit({ type: 'webPlace' });
         }
         if (b.shotT <= 0) {
@@ -1043,6 +1084,10 @@ export class Game {
           b.tx = p.x + p.vx * 0.3; b.ty = p.y + p.vy * 0.3;
           this.telegraphs.push({ kind: 'circle', x: b.tx, y: b.ty, r: 120, t: 0.9, max: 0.9, owner: b.id });
         }
+      } else if (b.state === 'rest') {
+        mv(0, 0, 10);
+        b.restT -= dt;
+        if (b.restT <= 0) b.state = 'idle';
       } else if (b.state === 'crouch') {
         mv(0, 0, 10);
         if (b.timer <= 0) { b.state = 'leap'; b.timer = 0.38; b.sx = b.x; b.sy = b.y; }
@@ -1053,7 +1098,7 @@ export class Game {
         b.air = Math.sin(f * Math.PI);
         if (b.timer <= 0) {
           b.air = 0;
-          b.state = 'idle'; b.timer = phase === 3 ? 2.6 : 4.2;
+          b.state = 'rest'; b.restT = phase === 3 ? 1.8 : 2.6; b.timer = phase === 3 ? 2.6 : 4.2;
           this.emit({ type: 'slam', x: b.x, y: b.y, r: 120 });
           if (dist2(p.x, p.y, b.x, b.y) < 130 * 130) this.hurtPlayer(26, b.x, b.y);
           // cut thread under the landing
@@ -1069,7 +1114,9 @@ export class Game {
         return;
       }
     }
-    b.x += b.vx * dt; b.y += b.vy * dt;
+    const tf = b.tangle > 0 && b.state !== 'charge' ? 0.15 : 1;
+    if (b.tangle > 0) b.tangle -= dt;
+    b.x += b.vx * dt * tf; b.y += b.vy * dt * tf;
   }
 
   updateHazards(dt) {
@@ -1081,11 +1128,6 @@ export class Game {
       if (w.t < w.arm) continue;
       if (w.t > w.life) continue;
       if (distSegSq(p.x, p.y, w.x0, w.y0, w.x1, w.y1) < 16 * 16) p.slowed = 0.3;
-      // webs sever the thread where it crosses
-      for (let i = th.length - 2; i >= 0; i--) {
-        const a = th[i], c = th[i + 1];
-        if (segIntersect(a.x, a.y, c.x, c.y, w.x0, w.y0, w.x1, w.y1)) { this.cutThread(i, a.x, a.y); break; }
-      }
     }
     this.webs = this.webs.filter((w) => w.t < w.life);
   }
@@ -1113,11 +1155,11 @@ export class Game {
     if (nl) {
       const st = UPGRADES.needle.stat(nl - 1);
       const ev = this.evolved.needle;
-      const cd = (ev ? 0.28 : st.cd) * s.cdMul / (this.needleFrenzy > 0 ? 2.6 : 1);
+      const cd = (ev ? 0.55 : st.cd) * s.cdMul / (this.needleFrenzy > 0 ? 3 : 1);
       T.needle = (T.needle ?? 0.5) - dt;
       if (T.needle <= 0) {
         T.needle = cd;
-        const count = st.count + (ev ? 2 : 0);
+        const count = st.count + (ev ? 1 : 0);
         const targets = this.nearestEnemies(p.x, p.y, count, 560);
         for (let i = 0; i < count; i++) {
           const t = targets[i % Math.max(1, targets.length)];
@@ -1125,7 +1167,7 @@ export class Game {
           if (t) a = Math.atan2(t.y - p.y, t.x - p.x) + (i >= targets.length ? (this.rng() - 0.5) * 0.4 : 0);
           else a = this.rng() * TAU;
           if (!t && !this.needleFrenzy) continue;
-          this.shots.push({ kind: 'needle', x: p.x, y: p.y, vx: Math.cos(a) * 640, vy: Math.sin(a) * 640, r: 6, dmg: st.dmg * (ev ? 1.3 : 1), pierce: st.pierce + (ev ? 1 : 0), life: 0.9, hit: new Set(), rot: a });
+          this.shots.push({ kind: 'needle', x: p.x, y: p.y, vx: Math.cos(a) * 640, vy: Math.sin(a) * 640, r: 6, dmg: st.dmg * (ev ? 1.2 : 1), pierce: st.pierce + (ev ? 1 : 0), life: 0.9, hit: new Set(), rot: a });
         }
         this.emit({ type: 'needle' });
       }
@@ -1182,9 +1224,20 @@ export class Game {
       });
     }
     const b = this.boss;
-    if (rl && b && !b.dead && b.razorCd <= 0) {
-      for (let i = 0; i < th.length; i += 3) {
-        if (dist2(b.x, b.y, th[i].x, th[i].y) < (b.r + 6) ** 2) { b.razorCd = st.tick; this.damage(b, D, 'razor', {}); break; }
+    if (b && !b.dead) {
+      for (let i = 0; i < th.length - 3; i += 3) {
+        if (dist2(b.x, b.y, th[i].x, th[i].y) < (b.r + 6) ** 2) {
+          b.tangle = 0.3; // even great yokai get caught in the thread
+          b.tangleAcc = (b.tangleAcc || 0) + 1 / 60;
+          if (b.tangleAcc > 1.1 && !(b.bindImmune > 0) && !(b.bound > 0)) {
+            b.bound = 2.4; b.bindImmune = 7; b.tangleAcc = 0;
+            this.telegraphs = this.telegraphs.filter((t) => t.owner !== b.id);
+            this.emit({ type: 'bind', x: b.x, y: b.y, r: b.r });
+            this.emit({ type: 'warn', text: `${b.def.name}が糸に絡まった！ 今だ、囲め！` });
+          }
+          if (rl && b.razorCd <= 0) { b.razorCd = st.tick; this.damage(b, D, 'razor', {}); }
+          break;
+        }
       }
     }
   }

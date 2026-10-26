@@ -46,7 +46,8 @@ export class Bot {
     for (const e of g.enemies) {
       if (dist2(e.x, e.y, p.x, p.y) < 380 * 380) { sx += e.x; sy += e.y; n++; }
     }
-    const R = Math.max(boss ? boss.r + 75 : 95, Math.min(230, (g.stats.threadLen * 0.68) / TAU));
+    const bossStill = boss && (boss.state === 'recover' || boss.state === 'rest' || boss.state === 'enter');
+    const R = this.R = boss ? boss.r + (boss.bound > 0 ? 40 : boss.def.ai === 'boss_lantern' ? 120 : 70) : Math.max(95, Math.min(230, (g.stats.threadLen * 0.68) / TAU));
     let mx, my;
     if (n === 0 && !boss) {
       // nothing nearby: collect pickups
@@ -73,7 +74,8 @@ export class Bot {
           this.center = { x: p.x + (vx / vl) * R, y: p.y + (vy / vl) * R };
         }
       }
-      if (boss) { const k = Math.min(1, dt * 0.7); this.center.x += (boss.x - this.center.x) * k; this.center.y += (boss.y - this.center.y) * k; }
+      
+      if (boss) { this.center.x = boss.x; this.center.y = boss.y; }
       const c = this.center;
       const dx = p.x - c.x, dy = p.y - c.y, d = Math.hypot(dx, dy) || 1;
       const ang = Math.atan2(dy, dx);
@@ -81,12 +83,14 @@ export class Bot {
       let da = ang - this.prevAng; while (da > Math.PI) da -= TAU; while (da < -Math.PI) da += TAU;
       this.swept += da * this.dir; this.prevAng = ang;
       const prog = this.swept / TAU;
-      if (prog > 0.82) {
-        // cut inward across the start of the lap to close the loop
-        const ta = this.startAng + 0.45 * this.dir;
-        const tx = c.x + Math.cos(ta) * R * 0.55 - p.x, ty = c.y + Math.sin(ta) * R * 0.55 - p.y;
+      if (prog > 0.75 && g.thread.length > 10) {
+        // head for an early part of our own thread to tie the knot
+        const th = g.thread;
+        let acc = 0, k = 0;
+        for (k = 1; k < th.length - 1; k++) { acc += th[k].d; if (acc > 90) break; }
+        const tx = th[k].x - p.x, ty = th[k].y - p.y;
         const l = Math.hypot(tx, ty) || 1; mx = tx / l; my = ty / l;
-        if (l < 30 || prog > 1.3) this.center = null; // missed the tail: start a fresh lap next frame
+        if (prog > 1.5) this.center = null; // give up on this lap
       } else {
         const want = prog < 0.12 ? R : R * 1.08;
         mx = (-dy / d) * this.dir + (dx / d) * ((want - d) / want) * 2.2;
@@ -103,6 +107,8 @@ export class Bot {
     const sp = g.stats.speed;
     let best = null, bestScore = -Infinity, worst = 0;
     const N = 20;
+    const hpf = p.hp / p.maxHp;
+    const caution = g.god ? 0 : hpf > 0.6 ? 0.35 : hpf > 0.35 ? 0.7 : 1;
     for (let i = 0; i <= N; i++) {
       let vx, vy;
       if (i === N) { vx = mx; vy = my; } else { const a = (i / N) * TAU; vx = Math.cos(a); vy = Math.sin(a); }
@@ -129,7 +135,7 @@ export class Bot {
           if (along > 0 && along < L && Math.abs(((qx - w.x0) * -vy2 + (qy - w.y0) * vx2) / L) < 20) pen += 60;
         }
       }
-      const score = (vx * mx + vy * my) * 100 - pen * (0.4 + this.skill * 0.6);
+      const score = (vx * mx + vy * my) * 100 - pen * (0.4 + this.skill * 0.6) * caution;
       if (score > bestScore) { bestScore = score; best = [vx, vy]; }
       if (i === N) worst = pen;
     }

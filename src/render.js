@@ -185,6 +185,10 @@ export class Renderer {
           this.flash = 1; this.flashColor = '255,250,230';
           this.rings.push({ x: game.player.x, y: game.player.y, r0: 10, r1: 420, t: 0, dur: 0.7, color: '255,240,200', w: 14 });
           break;
+        case 'bind':
+          this.rings.push({ x: e.x, y: e.y, r0: e.r * 2.5, r1: e.r, t: 0, dur: 0.35, color: '255,230,160', w: 6 });
+          this.addShake(0.3);
+          break;
         case 'snip':
           this.burst(e.x, e.y, 14, { speed: 260, life: 0.4, size: 3, color: '#ffffff', kind: 'spark' });
           break;
@@ -303,15 +307,15 @@ export class Renderer {
     for (let cx = cx0; cx <= cx1; cx++) {
       for (let cy = cy0; cy <= cy1; cy++) {
         const bx = cx * CHUNK, by = cy * CHUNK;
-        const n = 5 + Math.floor(hash2(cx, cy, 1) * 5);
+        const n = 4 + Math.floor(hash2(cx, cy, 1) * 4);
         for (let i = 0; i < n; i++) {
           const r = hash2(cx, cy, 10 + i);
           const px = bx + hash2(cx, cy, 30 + i) * CHUNK, py = by + hash2(cx, cy, 60 + i) * CHUNK;
           let img;
           let tall = false;
-          if (r < 0.03) { img = sp.torii; tall = true; }
-          else if (r < 0.1) { img = sp.lantern; tall = true; }
-          else if (r < 0.14) { img = sp.jizo; tall = true; }
+          if (r < 0.012) { img = sp.torii; tall = true; }
+          else if (r < 0.07) { img = sp.lantern; tall = true; }
+          else if (r < 0.09) { img = sp.jizo; tall = true; }
           else if (r < 0.32) img = sp.lily[i % 3];
           else if (r < 0.48) img = sp.stone[i % 3];
           else img = sp.grass[i % 4];
@@ -553,7 +557,7 @@ export class Renderer {
       ctx.strokeStyle = 'rgba(255,255,255,0.25)'; ctx.lineWidth = 2;
       ctx.beginPath(); ctx.ellipse(0, 9, 17, 6, 0, -Math.PI / 2, -Math.PI / 2 + f * TAU); ctx.stroke();
     }
-    ctx.scale(p.face, 1);
+    ctx.scale(p.face * 1.25, 1.25);
     ctx.translate(0, -bob);
     // trailing ribbon (scarf), waves opposite the movement
     const sway = Math.sin(t * 9) * 3;
@@ -614,7 +618,7 @@ export class Renderer {
     const f = Math.floor(this.time * 6 + e.phase * 3) % 2;
     const img = frames[f];
     const S = SPRITE_SCALE;
-    const w = img.width / S, h = img.height / S;
+    const w = (img.width / S) * 1.12, h = (img.height / S) * 1.12;
     const bob = e.def.ai === 'ranged' ? Math.sin(this.time * 3 + e.phase) * 4 - 6 : Math.abs(Math.sin(this.time * 8 + e.phase)) * -2;
     ctx.save();
     ctx.translate(e.x, e.y + bob);
@@ -639,9 +643,11 @@ export class Renderer {
       ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(e.x - 20, e.y - e.r - 16, 40, 5);
       ctx.fillStyle = '#ffcf5a'; ctx.fillRect(e.x - 19, e.y - e.r - 15, 38 * f2, 3);
     }
-    if (e.def.ai === 'cutter' && e.timer > 0.9) {
-      ctx.fillStyle = '#ff6b7a'; ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center';
-      ctx.fillText('✂', e.x, e.y - e.r - 6);
+    if (e.def.ai === 'cutter' && e.timer <= 0 && e.stun <= 0) {
+      // ready to snip: pulsing warning
+      const a = 0.6 + Math.sin(this.time * 12) * 0.4;
+      ctx.strokeStyle = `rgba(255,90,110,${a})`; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(e.x, e.y, e.r + 7, 0, TAU); ctx.stroke();
     }
   }
 
@@ -661,7 +667,7 @@ export class Renderer {
     if (b.type === 'obasami') {
       const open = b.state === 'aim' ? 0.75 + Math.sin(t * 30) * 0.05 : b.state === 'charge' ? 0.15 : 0.35 + Math.sin(t * 4) * 0.1;
       ctx.rotate(b.state === 'charge' || b.state === 'aim' ? Math.atan2(b.ay, b.ax) + Math.PI / 2 : Math.sin(t * 2) * 0.2);
-      this.paintScissors(ctx, r * 0.9, open);
+      this.paintScissors(ctx, r * 1.25, open);
     } else if (b.type === 'hyakume') {
       ctx.translate(0, Math.sin(t * 2) * 6);
       painters.chochin(ctx, r, Math.floor(t * 4) % 2);
@@ -680,6 +686,21 @@ export class Renderer {
     }
     ctx.filter = 'none';
     ctx.restore();
+    if (b.bound > 0) {
+      // wrapped in the player's thread
+      const col = game.char.glow;
+      ctx.save(); ctx.translate(b.x, b.y);
+      ctx.globalCompositeOperation = 'lighter';
+      for (let i = 0; i < 4; i++) {
+        ctx.strokeStyle = col + (0.5 + Math.sin(t * 8 + i) * 0.2) + ')'; ctx.lineWidth = 3;
+        ctx.beginPath(); ctx.ellipse(0, 0, r * 1.15, r * (0.35 + i * 0.12), i * 0.8 + t * 0.6, 0, TAU); ctx.stroke();
+      }
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.font = '900 26px "Zen Antique", serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.lineWidth = 4; ctx.strokeStyle = '#120f1c'; ctx.strokeText('縛', 0, -r - 26);
+      ctx.fillStyle = '#ffe9a0'; ctx.fillText('縛', 0, -r - 26);
+      ctx.restore();
+    }
   }
 
   paintScissors(ctx, r, open) {
@@ -750,7 +771,7 @@ export class Renderer {
     // soft light around glowing enemies (lanterns & wisps)
     for (const e of ents) {
       if (e.type === 'chochin') { ctx.globalAlpha = 0.28; ctx.drawImage(this.sp.glow.orange, e.x - e.r * 3, e.y - e.r * 3, e.r * 6, e.r * 6); }
-      else if (e.type === 'onibi') { ctx.globalAlpha = 0.35; ctx.drawImage(this.sp.glow.cyan, e.x - e.r * 3.5, e.y - e.r * 3.5 - 6, e.r * 7, e.r * 7); }
+      else if (e.type === 'onibi') { ctx.globalAlpha = 0.16; ctx.drawImage(this.sp.glow.cyan, e.x - e.r * 2.5, e.y - e.r * 2.5 - 6, e.r * 5, e.r * 5); }
     }
     ctx.globalAlpha = 1;
   }

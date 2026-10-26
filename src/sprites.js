@@ -243,7 +243,7 @@ function outlined(src) {
 // ---------------------------------------------------------------- props & ground
 function paintGround(size = 512) {
   const c = cv(size, size), g = c.getContext('2d');
-  g.fillStyle = '#152029'; g.fillRect(0, 0, size, size);
+  g.fillStyle = '#1e2d36'; g.fillRect(0, 0, size, size);
   const rnd = mulberry(7);
   // ink-wash blotches, wrapped so the tile is seamless
   const blot = (x, y, r, col) => {
@@ -253,7 +253,7 @@ function paintGround(size = 512) {
       g.fillStyle = gr; g.fillRect(x + ox - r, y + oy - r, r * 2, r * 2);
     }
   };
-  for (let i = 0; i < 26; i++) blot(rnd() * size, rnd() * size, 60 + rnd() * 140, rnd() < 0.5 ? 'rgba(40,62,66,0.45)' : 'rgba(8,12,22,0.45)');
+  for (let i = 0; i < 26; i++) blot(rnd() * size, rnd() * size, 60 + rnd() * 140, rnd() < 0.5 ? 'rgba(52,78,80,0.5)' : 'rgba(10,14,26,0.4)');
   for (let i = 0; i < 14; i++) blot(rnd() * size, rnd() * size, 30 + rnd() * 60, 'rgba(70,90,80,0.18)');
   // moss specks & grass strokes
   for (let i = 0; i < 900; i++) {
