@@ -48,7 +48,7 @@ kbd { font-family: var(--sans); font-size: 12px; background: #2a2440; border: 1p
 
 /* ---------------------------------------------------------------- title */
 .title-wrap { text-align: center; }
-.logo { font-family: var(--serif); font-size: clamp(56px, 11vw, 120px); line-height: 1; letter-spacing: 0.08em; margin: 0; color: #fff6ea;
+.logo { font-family: var(--serif); white-space: nowrap; font-size: clamp(40px, 11vw, 120px); line-height: 1; letter-spacing: 0.08em; margin: 0; color: #fff6ea;
   text-shadow: 0 0 2px #fff, 0 0 24px rgba(255, 60, 90, 0.75), 0 0 60px rgba(255, 60, 90, 0.35); }
 .logo .thread { color: var(--red); }
 .logo-sub { font-size: 13px; letter-spacing: 0.6em; color: var(--gold); margin: 10px 0 6px; padding-left: 0.6em; }
@@ -186,6 +186,8 @@ kbd { font-family: var(--sans); font-size: 12px; background: #2a2440; border: 1p
 .dashbtn { position: absolute; right: 26px; bottom: 34px; width: 84px; height: 84px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, 0.35); background: rgba(255, 60, 90, 0.35); color: #fff; font-weight: 900; font-size: 16px; letter-spacing: 0.1em; }
 
 @media (max-width: 720px) {
+  .logo { letter-spacing: 0.02em; }
+  .title-foot { font-size: 11px; }
   .chars { grid-template-columns: 1fr; }
   .char { display: grid; grid-template-columns: 80px 1fr; text-align: left; gap: 0 12px; align-items: center; padding: 10px; }
   .char canvas { width: 72px; height: 72px; grid-row: span 3; margin: 0; }

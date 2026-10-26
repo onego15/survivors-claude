@@ -325,7 +325,7 @@ function frame(now) {
 
   if (mode === 'run') {
     ui.updateHud(game);
-    updateHints(dt);
+    if (!runOver) updateHints(dt);
     // music intensity
     const b = game.boss;
     audio.setIntensity(b ? (b.def.boss === 3 ? 3 : 2) : game.time > 300 ? 1 : 0);
