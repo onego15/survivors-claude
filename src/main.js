@@ -199,8 +199,7 @@ function startRun(charId) {
   lastUiState = null;
   ui.clear();
   const seed = params.has('seed') ? +params.get('seed') : (Math.random() * 1e9) | 0;
-  game = new Game({ seed, char: charId, meta: { ...save.meta } });
-  if (params.has('god')) game.player.maxHp = game.stats.maxHp = game.player.hp = 99999;
+  game = new Game({ seed, char: charId, meta: { ...save.meta }, god: params.has('god') });
   bot = AUTOPLAY ? new Bot(game, params.get('build') || 'random') : null;
   renderer.reset(game);
   ui.buildHud(game, () => togglePause());
