@@ -793,6 +793,12 @@ export class Game {
     b.state = 'enter'; b.timer = 1.2;
     this.boss = b;
     this.webs = [];
+    // lesser yokai scatter before a great one
+    for (const e of this.enemies) {
+      if (e === b || e.elite || e.dead) continue;
+      e.dead = true;
+      this.emit({ type: 'scatter', x: e.x, y: e.y, r: e.r });
+    }
     this.emit({ type: 'bossSpawn', id, name: b.def.name, title: b.def.title });
   }
 
@@ -940,6 +946,12 @@ export class Game {
         }
       }
 
+      // the boss shoulders lesser yokai aside so it stays readable
+      const bo = this.boss;
+      if (bo && !bo.dead && e !== bo) {
+        const bx = e.x - bo.x, by = e.y - bo.y, bd = bx * bx + by * by, mr = bo.r + e.r;
+        if (bd < mr * mr && bd > 0.01) { const l = Math.sqrt(bd); e.x = bo.x + (bx / l) * mr; e.y = bo.y + (by / l) * mr; }
+      }
       // contact with player
       const cr = e.r + p.r - 3;
       if (dist2(e.x, e.y, p.x, p.y) < cr * cr && !e.pull) this.hurtPlayer(e.dmg, e.x, e.y);

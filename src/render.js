@@ -185,6 +185,9 @@ export class Renderer {
           this.flash = 1; this.flashColor = '255,250,230';
           this.rings.push({ x: game.player.x, y: game.player.y, r0: 10, r1: 420, t: 0, dur: 0.7, color: '255,240,200', w: 14 });
           break;
+        case 'scatter':
+          this.burst(e.x, e.y, 3, { speed: 80, life: 0.6, size: e.r * 0.4, color: '#2a2240', kind: 'ink', drag: 3 });
+          break;
         case 'bind':
           this.rings.push({ x: e.x, y: e.y, r0: e.r * 2.5, r1: e.r, t: 0, dur: 0.35, color: '255,230,160', w: 6 });
           this.addShake(0.3);
@@ -247,10 +250,11 @@ export class Renderer {
     let playerDrawn = false;
     for (const e of ents) {
       if (!playerDrawn && e.y > p.y) { this.drawPlayer(ctx, game); playerDrawn = true; }
-      if (e.boss) this.drawBoss(ctx, game, e);
-      else this.drawEnemy(ctx, game, e);
+      if (!e.boss) this.drawEnemy(ctx, game, e);
     }
     if (!playerDrawn) this.drawPlayer(ctx, game);
+    // the boss is always drawn on top of the crowd
+    if (game.boss && !game.boss.dead) this.drawBoss(ctx, game, game.boss);
     this.drawProps(ctx, x0, y0, x1, y1, 'over');
 
     // ---- additive layer: shots, cranes, foxfire, effects

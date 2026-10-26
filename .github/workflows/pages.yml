@@ -36,9 +36,12 @@ jobs:
       - name: Assemble static site
         run: |
           mkdir -p _site
-          cp -r index.html style.css src docs _site/
+          cp -r index.html style.css src _site/
+          if [ -d docs ]; then cp -r docs _site/; fi
           touch _site/.nojekyll
       - uses: actions/configure-pages@v5
+        with:
+          enablement: true
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site
